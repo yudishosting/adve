@@ -113,7 +113,7 @@
 
     // Buffer Form Admin
     let editingTripId = null;
-    let isLocationLocked = false; // State pengunci titik koordinat
+    let isLocationLocked = true; // DEFAULT SELALU TERKUNCI DEMI KEAMANAN JEJAK
     let tempCoverBase64 = '';
     let tempGalleryList = [];
 
@@ -160,7 +160,7 @@
                 Dokumentasi Petualangan Pribadi
               </span>
               <h1 class="text-4xl sm:text-5xl font-black text-white tracking-tight">My Adventure Album</h1>
-              <p class="text-zinc-400 text-base sm:text-lg">Every journey has a story. Dokumentasi rute pendakian, eksplorasi alam bebas, dan koordinat perjalanan tanpa khawatir jejak hilang.</p>
+              <p class="text-zinc-400 text-base sm:text-lg">Every journey has a story. Dokumentasi rute pendakian, eksplorasi alam bebas, dan koordinat perjalanan presisi.</p>
               <div class="pt-2">
                 <button onclick="navigate('/album')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-lg shadow-emerald-950 text-sm">
                   Jelajahi Perjalanan &rarr;
@@ -390,7 +390,7 @@
       }, 50);
     }
 
-    // 4. KONTROL PANEL (DENGAN PROTEKSI KOORDINAT ANTI-GESER)
+    // 4. KONTROL PANEL (HARD LOCK KOORDINAT ANTI-GESER)
     function renderAdmin() {
       const root = document.getElementById('app-root');
       window.scrollTo(0, 0);
@@ -427,13 +427,9 @@
 
       const editingTrip = editingTripId ? trips.find(t => t.id === editingTripId) : null;
 
-      // Jika baru pertama kali masuk edit, kunci koordinat secara default agar tidak sengaja geser
       if (editingTrip && !tempCoverBase64) {
         tempCoverBase64 = editingTrip.cover_image;
         tempGalleryList = JSON.parse(JSON.stringify(editingTrip.photos || []));
-        isLocationLocked = true; // Kunci aktif
-      } else if (!editingTrip) {
-        isLocationLocked = false; // Mode tambah baru dibuka bebas
       }
 
       root.innerHTML = `
@@ -441,7 +437,7 @@
           <div class="flex justify-between items-center border-b border-zinc-800 pb-4">
             <div>
               <h1 class="text-2xl font-black text-white">Admin Kontrol Panel</h1>
-              <p class="text-xs text-zinc-400">Kelola penuh isi website: tambah baru, edit isi album, ubah titik lokasi, dan atur galeri.</p>
+              <p class="text-xs text-zinc-400">Kelola penuh isi website: edit data, tambah rute, dan kunci titik lokasi.</p>
             </div>
             <button onclick="handleAdminLogout()" class="text-xs text-rose-400 hover:underline">Keluar (Logout)</button>
           </div>
@@ -488,33 +484,32 @@
                 <textarea id="form-desc" rows="3" placeholder="Ceritakan kisah perjalanan..." class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none">${editingTrip ? editingTrip.description : ''}</textarea>
               </div>
 
-              <!-- SECTION PETA DENGAN KONTROL ANTI-GESER -->
+              <!-- SECTION PETA DENGAN HARD LOCK -->
               <div class="border border-zinc-800 bg-zinc-950 p-4 sm:p-5 rounded-2xl space-y-3 relative z-30">
-                <div class="flex items-center justify-between">
-                  <label class="block text-xs font-black text-emerald-400 uppercase tracking-wider">
-                    📍 Lokasi & Titik Koordinat GPS
-                  </label>
-                  
-                  <!-- Switch Kunci Titik -->
-                  <div class="flex items-center gap-2">
-                    <button 
-                      type="button" 
-                      onclick="toggleCoordinateLock()" 
-                      class="px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${isLocationLocked ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'}"
-                    >
-                      <span>${isLocationLocked ? '🔒 Titik Terkunci (Aman)' : '🔓 Titik Terbuka (Bisa Ubah)'}</span>
-                    </button>
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <label class="block text-xs font-black text-emerald-400 uppercase tracking-wider">
+                      📍 Titik Koordinat GPS
+                    </label>
+                    <span class="text-[11px] ${isLocationLocked ? 'text-amber-400 font-semibold' : 'text-zinc-400'}">
+                      ${isLocationLocked 
+                        ? '🛡️ Titik Terkunci Permanen. Anda bebas Zoom & Geser layar peta tanpa risiko titik berpindah.' 
+                        : '⚠️ Mode Ubah Aktif: Anda bisa mencari tempat baru atau klik peta.'}
+                    </span>
                   </div>
+                  
+                  <!-- Tombol Switch Kunci -->
+                  <button 
+                    type="button" 
+                    onclick="toggleCoordinateLock()" 
+                    class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md ${isLocationLocked ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30'}"
+                  >
+                    <span>${isLocationLocked ? '🔒 Kunci Titik (Anti-Geser: ON)' : '🔓 Buka Kunci (Bisa Pindah Titik)'}</span>
+                  </button>
                 </div>
-
-                <p id="lock-hint" class="text-[11px] ${isLocationLocked ? 'text-amber-400/90' : 'text-zinc-400'}">
-                  ${isLocationLocked 
-                    ? '🛡️ Titik koordinat terkunci aman agar jejak tidak sengaja meleset. Anda bebas zoom in/out dan geser layar peta untuk melihat area sekitar.' 
-                    : 'Pencarian aktif: Anda dapat mencari tempat atau klik titik peta untuk menyesuaikan koordinat.'}
-                </p>
                 
-                <!-- Search Box (Disabled jika Terkunci) -->
-                <div class="relative z-50 ${isLocationLocked ? 'opacity-40 pointer-events-none' : ''}">
+                <!-- Search Box (Ditutup saat Terkunci) -->
+                <div id="search-box-wrapper" class="relative z-50 ${isLocationLocked ? 'hidden' : 'block'}">
                   <div class="flex gap-2">
                     <input 
                       id="search-map-query" 
@@ -524,7 +519,7 @@
                       class="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none shadow-sm" 
                     />
                     <button type="button" onclick="searchLocationMap()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl text-xs font-bold text-white transition-all shadow-md">
-                      Cari Lokasi
+                      Cari
                     </button>
                   </div>
 
@@ -534,15 +529,15 @@
                 <!-- Kontainer Peta -->
                 <div id="admin-map-container" class="h-64 w-full rounded-xl overflow-hidden border border-zinc-800 relative z-0 mt-3"></div>
 
-                <!-- Input Koordinat -->
+                <!-- Input Koordinat Terkunci -->
                 <div class="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <label class="text-[10px] text-zinc-500 uppercase font-bold">Latitude ${isLocationLocked ? '(Terkunci)' : ''}</label>
-                    <input id="form-lat" type="number" step="any" ${isLocationLocked ? 'readonly' : ''} value="${editingTrip ? editingTrip.latitude : -8.125}" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 font-mono text-xs text-emerald-400 ${isLocationLocked ? 'cursor-not-allowed opacity-75' : ''}" />
+                    <input id="form-lat" type="number" step="any" ${isLocationLocked ? 'readonly' : ''} value="${editingTrip ? editingTrip.latitude : -8.125}" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 font-mono text-xs text-emerald-400 ${isLocationLocked ? 'cursor-not-allowed opacity-60 bg-zinc-950' : ''}" />
                   </div>
                   <div>
                     <label class="text-[10px] text-zinc-500 uppercase font-bold">Longitude ${isLocationLocked ? '(Terkunci)' : ''}</label>
-                    <input id="form-lng" type="number" step="any" ${isLocationLocked ? 'readonly' : ''} value="${editingTrip ? editingTrip.longitude : 114.042}" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 font-mono text-xs text-emerald-400 ${isLocationLocked ? 'cursor-not-allowed opacity-75' : ''}" />
+                    <input id="form-lng" type="number" step="any" ${isLocationLocked ? 'readonly' : ''} value="${editingTrip ? editingTrip.longitude : 114.042}" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 font-mono text-xs text-emerald-400 ${isLocationLocked ? 'cursor-not-allowed opacity-60 bg-zinc-950' : ''}" />
                   </div>
                 </div>
               </div>
@@ -631,6 +626,8 @@
 
     function toggleCoordinateLock() {
       isLocationLocked = !isLocationLocked;
+      const lat = parseFloat(document.getElementById('form-lat').value);
+      const lng = parseFloat(document.getElementById('form-lng').value);
       renderAdmin();
     }
 
@@ -668,7 +665,7 @@
       if (t) {
         tempCoverBase64 = t.cover_image;
         tempGalleryList = JSON.parse(JSON.stringify(t.photos || []));
-        isLocationLocked = true; // Langsung kunci titik saat edit dibuka
+        isLocationLocked = true; // Kunci permanen aktif begitu buka edit
       }
       renderAdmin();
       document.getElementById('form-container')?.scrollIntoView({ behavior: 'smooth' });
@@ -676,7 +673,7 @@
 
     function cancelEdit() {
       editingTripId = null;
-      isLocationLocked = false;
+      isLocationLocked = true;
       tempCoverBase64 = '';
       tempGalleryList = [];
       renderAdmin();
@@ -715,18 +712,29 @@
       navigate('/');
     }
 
-    // INIT PETA DENGAN LOGIKA LOCK / UNLOCK
+    // INIT PETA DENGAN ZERO ACCIDENTAL TOUCH/DRAG
     function initPickerMap(lat, lng) {
       setTimeout(() => {
-        if (pickerMap) pickerMap.remove();
-        pickerMap = L.map('admin-map-container').setView([lat, lng], 11);
+        if (pickerMap) {
+          pickerMap.off(); // Matikan semua event listener lama
+          pickerMap.remove();
+        }
+
+        // Peta dibuat dengan navigasi zoom & pan tetap hidup
+        pickerMap = L.map('admin-map-container', {
+          dragging: true,
+          touchZoom: true,
+          scrollWheelZoom: true,
+          doubleClickZoom: true
+        }).setView([lat, lng], 12);
+
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(pickerMap);
 
-        // Marker draggable HANYA jika TIDAK dikunci
+        // Marker dipaksa FALSE untuk draggable jika terkunci
         pickerMarker = L.marker([lat, lng], { draggable: !isLocationLocked }).addTo(pickerMap);
 
         if (!isLocationLocked) {
-          // Event jika status UNLOCKED (Bebas ubah)
+          // Hanya jika admin sengaja menekan tombol buka kunci
           pickerMarker.on('dragend', function(e) {
             const pos = e.target.getLatLng();
             document.getElementById('form-lat').value = pos.lat.toFixed(6);
@@ -739,8 +747,12 @@
             document.getElementById('form-lng').value = e.latlng.lng.toFixed(6);
           });
         } else {
-          // Saat LOCKED: Marker diam di tempat, klik peta tidak memindahkan titik koordinat
-          pickerMarker.bindPopup('<b class="text-xs text-amber-400">Titik Jejak Terkunci</b><br/><span class="text-[10px] text-zinc-400">Buka kunci di atas jika ingin memindahkan titik.</span>');
+          // MODE TERKUNCI (HARD LOCK):
+          // Hapus semua event klik & drag agar sentuhan tidak memindahkan titik
+          pickerMarker.off('dragend');
+          pickerMap.off('click');
+          
+          pickerMarker.bindPopup('<b class="text-xs text-amber-400">Titik Jejak Terkunci</b><br/><span class="text-[10px] text-zinc-400">Jejak koordinat diproteksi agar tidak bergeser saat zoom/pan.</span>');
         }
       }, 50);
     }
