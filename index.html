@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Adventure Album</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS (100% Bebas API Key) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    .leaflet-popup-content-wrapper {
+      background: #18181b !important;
+      color: #f4f4f5 !important;
+      border-radius: 12px !important;
+      border: 1px solid #27272a !important;
+    }
+    .leaflet-popup-tip { background: #18181b !important; }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 font-sans antialiased min-h-screen flex flex-col selection:bg-emerald-500 selection:text-white">
+
+  <!-- NAVBAR PUBLIK BERSIH (Tombol admin disembunyikan total) -->
+  <nav class="sticky top-0 z-40 bg-zinc-950/85 backdrop-blur-md border-b border-zinc-800">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 cursor-pointer" onclick="navigate('/')">
+        <span class="text-2xl">🧭</span>
+        <div>
+          <span class="font-black tracking-tight text-lg text-emerald-400">My Adventure</span>
+          <span class="font-light text-zinc-400 text-sm hidden sm:inline"> | Album</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-6 text-sm font-medium">
+        <button onclick="navigate('/')" class="hover:text-emerald-400 transition-colors">Beranda</button>
+        <button onclick="navigate('/album')" class="hover:text-emerald-400 transition-colors">Album</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER UTAMA -->
+  <main id="app-root" class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8"></main>
+
+  <!-- LIGHTBOX FOTO MODAL -->
+  <div id="lightbox-modal" class="fixed inset-0 z-50 bg-black/95 hidden flex-col items-center justify-center p-4">
+    <button onclick="closeLightbox()" class="absolute top-5 right-5 text-white bg-zinc-800 hover:bg-zinc-700 w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold transition-all">✕</button>
+    <img id="lightbox-img" src="" class="max-h-[80vh] max-w-[90vw] object-contain rounded-xl shadow-2xl" />
+    <p id="lightbox-caption" class="text-zinc-300 text-sm mt-4 text-center max-w-lg"></p>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-zinc-900 bg-zinc-950 py-8 text-center text-xs text-zinc-600">
+    <p>&copy; 2026 My Adventure Album. Every journey has a story.</p>
+    <div class="mt-3 flex items-center justify-center gap-2">
+      <span class="text-zinc-800">&bull;</span>
+      <button onclick="navigate('/kontrolpanel')" class="text-zinc-700 hover:text-emerald-400 transition-colors font-mono text-[11px]">
+        [Admin Panel]
+      </button>
+      <span class="text-zinc-800">&bull;</span>
+    </div>
+  </footer>
+
+  <script>
+    // DATA PERJALANAN AWAL (Disimpan permanen di LocalStorage browser)
+    const INITIAL_TRIPS = [
+      {
+        id: '1',
+        title: 'Ekspedisi Puncak Sejati Gunung Raung',
+        slug: 'ekspedisi-gunung-raung',
+        location: 'Gunung Raung, Banyuwangi/Jember',
+        category: 'Pendakian',
+        date: '2026-08-15',
+        latitude: -8.125,
+        longitude: 114.042,
+        cover_image: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1000&q=80',
+        description: 'Jalur ekstrem kaldera terbesar di pulau Jawa. Meniti jembatan Shiratal Mustaqim dengan jurang di kanan kiri sebelum tiba di Puncak Sejati 3.344 MDPL.',
+        photos: [
+          { url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=800&q=80', caption: 'Sunrise di punggungan kaldera' },
+          { url: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80', caption: 'Camp area sebelum summit attack' }
+        ]
+      },
+      {
+        id: '2',
+        title: 'Eksplorasi Nuanu Creative Eco-City',
+        slug: 'nuanu-creative-city',
+        location: 'Nuanu, Tabanan, Bali',
+        category: 'Traveling',
+        date: '2026-09-02',
+        latitude: -8.5992,
+        longitude: 115.1145,
+        cover_image: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=1000&q=80',
+        description: 'Kawasan kreatif terpadu ramah lingkungan di tepi pantai Bali dengan perpaduan arsitektur bambu megah dan teknologi hijau.',
+        photos: [
+          { url: 'https://images.unsplash.com/photo-1544644181-1484b3fdfc62?auto=format&fit=crop&w=800&q=80', caption: 'Instalasi seni ramah lingkungan tepi laut' }
+        ]
+      }
+    ];
+
+    let trips = JSON.parse(localStorage.getItem('my_adventure_db_prod')) || INITIAL_TRIPS;
+    let isAdminAuth = sessionStorage.getItem('admin_session_auth') === 'true';
+
+    function saveDB() {
+      localStorage.setItem('my_adventure_db_prod', JSON.stringify(trips));
+    }
+
+    let currentRoute = '/';
+    let selectedTrip = null;
+    let homeMap = null;
+    let pickerMap = null;
+    let pickerMarker = null;
+
+    let tempCoverBase64 = '';
+    let tempGalleryList = [];
+
+    // ROUTER SPA DENGAN DUKUNGAN REAL PATH URL
+    function navigate(path) {
+      if (window.location.pathname !== path) {
+        window.history.pushState({}, '', path);
+      }
+      routeHandler();
+    }
+
+    window.addEventListener('popstate', routeHandler);
+
+    function routeHandler() {
+      const path = window.location.pathname.replace(/\/+$/, '') || '/';
+      currentRoute = path;
+
+      if (path === '/kontrolpanel') {
+        renderAdmin();
+      } else if (path === '/album' || path === '/albums') {
+        renderAlbums();
+      } else if (path.startsWith('/album/')) {
+        const slug = path.replace('/album/', '');
+        selectedTrip = trips.find(t => t.slug === slug);
+        if (selectedTrip) {
+          renderDetail();
+        } else {
+          renderAlbums();
+        }
+      } else {
+        renderHome();
+      }
+    }
+
+    // 1. BERANDA (LANDING PAGE)
+    function renderHome() {
+      const root = document.getElementById('app-root');
+      window.scrollTo(0, 0);
+      const totalPhotos = trips.reduce((acc, t) => acc + (t.photos?.length || 0), 0);
+
+      root.innerHTML = `
+        <div class="space-y-12">
+          <!-- Hero -->
+          <div class="relative rounded-3xl overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-900 to-emerald-950/40 p-8 sm:p-14 border border-zinc-800 shadow-2xl">
+            <div class="max-w-2xl space-y-4">
+              <span class="inline-block px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-full uppercase tracking-widest">
+                Dokumentasi Petualangan Pribadi
+              </span>
+              <h1 class="text-4xl sm:text-5xl font-black text-white tracking-tight">My Adventure Album</h1>
+              <p class="text-zinc-400 text-base sm:text-lg">Every journey has a story. Dokumentasi rute pendakian, eksplorasi alam, dan titik koordinat gps.</p>
+              <div class="pt-2">
+                <button onclick="navigate('/album')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-lg shadow-emerald-950 text-sm">
+                  Jelajahi Perjalanan &rarr;
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Statistik -->
+          <div class="grid grid-cols-3 gap-3 sm:gap-6">
+            <div class="bg-zinc-900/60 border border-zinc-800 p-4 sm:p-6 rounded-2xl text-center">
+              <div class="text-2xl sm:text-4xl font-black text-emerald-400">${trips.length}</div>
+              <div class="text-[11px] sm:text-xs text-zinc-400 mt-1 uppercase font-semibold">Total Ekspedisi</div>
+            </div>
+            <div class="bg-zinc-900/60 border border-zinc-800 p-4 sm:p-6 rounded-2xl text-center">
+              <div class="text-2xl sm:text-4xl font-black text-white">${trips.length}</div>
+              <div class="text-[11px] sm:text-xs text-zinc-400 mt-1 uppercase font-semibold">Titik Lokasi</div>
+            </div>
+            <div class="bg-zinc-900/60 border border-zinc-800 p-4 sm:p-6 rounded-2xl text-center">
+              <div class="text-2xl sm:text-4xl font-black text-emerald-400">${totalPhotos}</div>
+              <div class="text-[11px] sm:text-xs text-zinc-400 mt-1 uppercase font-semibold">Foto Galeri</div>
+            </div>
+          </div>
+
+          <!-- Peta Global -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                <span>📍</span> Peta Jejak Petualangan
+              </h2>
+              <span class="text-xs text-zinc-500">Leaflet &bull; OpenStreetMap</span>
+            </div>
+            <div id="home-map" class="h-80 sm:h-96 w-full rounded-2xl border border-zinc-800 overflow-hidden shadow-inner"></div>
+          </div>
+
+          <!-- Perjalanan Terbaru -->
+          <div class="space-y-6">
+            <div class="flex justify-between items-center">
+              <h2 class="text-xl sm:text-2xl font-bold text-white">Perjalanan Terbaru</h2>
+              <button onclick="navigate('/album')" class="text-xs text-emerald-400 font-semibold hover:underline">Lihat Semua Album →</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              ${trips.slice(0, 4).map(t => createTripCard(t)).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+
+      setTimeout(() => {
+        if (homeMap) homeMap.remove();
+        homeMap = L.map('home-map').setView([-8.4, 114.5], 8);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(homeMap);
+
+        const markers = [];
+        trips.forEach(t => {
+          if (t.latitude && t.longitude) {
+            const m = L.marker([t.latitude, t.longitude]).addTo(homeMap);
+            m.bindPopup(`
+              <div class="p-1 space-y-1">
+                <span class="text-[10px] bg-emerald-600/30 text-emerald-400 px-1.5 py-0.5 rounded font-bold">${t.category}</span>
+                <p class="font-bold text-sm text-white mt-1">${t.title}</p>
+                <p class="text-xs text-zinc-400">${t.location}</p>
+                <button onclick="navigate('/album/${t.slug}')" class="mt-2 w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold py-1.5 rounded-lg">Buka Album</button>
+              </div>
+            `);
+            markers.push([t.latitude, t.longitude]);
+          }
+        });
+        if (markers.length > 0) homeMap.fitBounds(markers, { padding: [50, 50] });
+      }, 60);
+    }
+
+    // 2. ALBUM
+    let albumFilter = 'Semua';
+    let albumSearch = '';
+
+    function renderAlbums() {
+      const root = document.getElementById('app-root');
+      window.scrollTo(0, 0);
+
+      const filtered = trips.filter(t => {
+        const matchesCategory = albumFilter === 'Semua' || t.category === albumFilter;
+        const matchesSearch = t.title.toLowerCase().includes(albumSearch.toLowerCase()) || 
+                              t.location.toLowerCase().includes(albumSearch.toLowerCase());
+        return matchesCategory && matchesSearch;
+      });
+
+      root.innerHTML = `
+        <div class="space-y-8">
+          <div>
+            <h1 class="text-3xl font-extrabold text-white">Album Perjalanan</h1>
+            <p class="text-zinc-400 text-sm mt-1">Daftar arsip seluruh pendakian, traveling, dan wisata alam.</p>
+          </div>
+
+          <div class="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
+            <div class="flex flex-wrap gap-2">
+              ${['Semua', 'Pendakian', 'Traveling', 'Wisata'].map(cat => `
+                <button onclick="setFilter('${cat}')" class="px-4 py-2 rounded-xl text-xs font-bold transition-all ${albumFilter === cat ? 'bg-emerald-600 text-white shadow-md' : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white'}">
+                  ${cat}
+                </button>
+              `).join('')}
+            </div>
+            <input 
+              type="text" 
+              placeholder="Cari tempat atau judul..." 
+              value="${albumSearch}"
+              oninput="handleSearch(this.value)"
+              class="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-xs focus:outline-none focus:border-emerald-500 w-full sm:w-64 text-white"
+            />
+          </div>
+
+          ${filtered.length > 0 ? `
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              ${filtered.map(t => createTripCard(t)).join('')}
+            </div>
+          ` : `
+            <div class="text-center py-16 border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-sm">
+              Tidak ada perjalanan yang sesuai dengan pencarian tersebut.
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    function setFilter(cat) {
+      albumFilter = cat;
+      renderAlbums();
+    }
+
+    function handleSearch(q) {
+      albumSearch = q;
+      renderAlbums();
+    }
+
+    function createTripCard(trip) {
+      return `
+        <div onclick="navigate('/album/${trip.slug}')" class="group bg-zinc-900 border border-zinc-800 hover:border-emerald-500/60 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 shadow-lg">
+          <div class="h-48 w-full bg-zinc-950 relative overflow-hidden">
+            <img src="${trip.cover_image}" alt="${trip.title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+            <span class="absolute top-3 right-3 bg-zinc-900/80 backdrop-blur-md text-emerald-400 text-xs px-2.5 py-1 rounded-full font-bold border border-zinc-700">
+              ${trip.category}
+            </span>
+          </div>
+          <div class="p-5 space-y-2">
+            <div class="text-xs text-zinc-500">🗓️ ${trip.date} &bull; 📍 ${trip.location}</div>
+            <h3 class="font-bold text-base sm:text-lg text-white group-hover:text-emerald-400 transition-colors">${trip.title}</h3>
+            <p class="text-xs text-zinc-400 line-clamp-2">${trip.description}</p>
+            <div class="pt-2 text-xs text-emerald-400 font-bold flex justify-between items-center border-t border-zinc-800/80">
+              <span>${trip.photos ? trip.photos.length : 0} Foto Dokumentasi</span>
+              <span>Buka Detail &rarr;</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 3. DETAIL PERJALANAN
+    function renderDetail() {
+      const root = document.getElementById('app-root');
+      window.scrollTo(0, 0);
+
+      root.innerHTML = `
+        <div class="space-y-8">
+          <button onclick="navigate('/album')" class="text-xs text-zinc-400 hover:text-white flex items-center gap-1.5 font-medium">
+            &larr; Kembali ke Daftar Album
+          </button>
+
+          <!-- Banner Cover -->
+          <div class="h-80 sm:h-96 w-full rounded-3xl overflow-hidden relative border border-zinc-800 shadow-2xl">
+            <img src="${selectedTrip.cover_image}" class="w-full h-full object-cover" />
+            <div class="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/40 to-transparent flex flex-col justify-end p-6 sm:p-10">
+              <span class="text-xs bg-emerald-600 text-white font-bold px-3 py-1 rounded-full w-max mb-2">${selectedTrip.category}</span>
+              <h1 class="text-2xl sm:text-4xl font-black text-white tracking-tight">${selectedTrip.title}</h1>
+              <p class="text-zinc-300 text-xs sm:text-sm mt-1">📍 ${selectedTrip.location} &bull; 🗓️ ${selectedTrip.date}</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="md:col-span-2 space-y-8">
+              <div class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-3">
+                <h3 class="text-base font-bold text-white">Catatan Perjalanan</h3>
+                <p class="text-zinc-300 text-sm leading-relaxed whitespace-pre-line">${selectedTrip.description}</p>
+              </div>
+
+              <div class="space-y-4">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                  <span>📸</span> Galeri Dokumentasi (${selectedTrip.photos ? selectedTrip.photos.length : 0})
+                </h3>
+                ${selectedTrip.photos && selectedTrip.photos.length > 0 ? `
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    ${selectedTrip.photos.map(p => `
+                      <div onclick="openLightbox('${p.url}', '${p.caption || ''}')" class="group bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden cursor-pointer hover:border-emerald-500/50 transition-all">
+                        <div class="h-44 w-full bg-zinc-950 overflow-hidden">
+                          <img src="${p.url}" class="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" loading="lazy" />
+                        </div>
+                        <p class="p-2.5 text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors">${p.caption || 'Perbesar foto'}</p>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : `
+                  <p class="text-xs text-zinc-500 italic">Belum ada foto galeri.</p>
+                `}
+              </div>
+            </div>
+
+            <div class="space-y-4">
+              <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
+                <h4 class="font-bold text-white text-sm">Titik Koordinat GPS</h4>
+                <div class="bg-zinc-950 border border-zinc-800 p-3 rounded-xl font-mono text-xs text-emerald-400 space-y-1">
+                  <div>Lat: ${selectedTrip.latitude}</div>
+                  <div>Lng: ${selectedTrip.longitude}</div>
+                </div>
+                
+                <a href="https://www.google.com/maps?q=${selectedTrip.latitude},${selectedTrip.longitude}" target="_blank" class="block text-center bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-md">
+                  Buka di Google Maps ↗
+                </a>
+
+                <div id="detail-map" class="h-52 w-full rounded-xl overflow-hidden border border-zinc-700"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      setTimeout(() => {
+        const dMap = L.map('detail-map').setView([selectedTrip.latitude, selectedTrip.longitude], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(dMap);
+        L.marker([selectedTrip.latitude, selectedTrip.longitude]).addTo(dMap);
+      }, 50);
+    }
+
+    // 4. KONTROL PANEL (AUTH RAHASIA: admin / adventure2026)
+    function renderAdmin() {
+      const root = document.getElementById('app-root');
+      window.scrollTo(0, 0);
+
+      if (!isAdminAuth) {
+        root.innerHTML = `
+          <div class="min-h-[60vh] flex items-center justify-center p-4">
+            <form onsubmit="handleAdminLogin(event)" class="w-full max-w-sm bg-zinc-900 border border-zinc-800 p-8 rounded-2xl space-y-5 shadow-2xl">
+              <div class="text-center space-y-1">
+                <h1 class="text-xl font-black text-white">🔒 Kontrol Akses Admin</h1>
+                <p class="text-xs text-zinc-500">Hanya untuk pengelola dokumentasi</p>
+              </div>
+
+              <div id="login-error" class="hidden p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs rounded-xl text-center"></div>
+
+              <div>
+                <label class="block text-xs font-semibold text-zinc-400 mb-1">Username</label>
+                <input id="admin-user" type="text" required placeholder="admin" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-zinc-400 mb-1">Password</label>
+                <input id="admin-pass" type="password" required placeholder="••••••••••••" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500" />
+              </div>
+
+              <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-white py-2.5 rounded-xl text-xs transition-all shadow-lg shadow-emerald-950">
+                Masuk ke Kontrol Panel
+              </button>
+            </form>
+          </div>
+        `;
+        return;
+      }
+
+      tempCoverBase64 = '';
+      tempGalleryList = [];
+
+      root.innerHTML = `
+        <div class="max-w-3xl mx-auto space-y-6">
+          <div class="flex justify-between items-center border-b border-zinc-800 pb-4">
+            <div>
+              <h1 class="text-2xl font-black text-white">Admin Kontrol Panel</h1>
+              <p class="text-xs text-zinc-400">Pencarian peta langsung & upload foto dari file lokal.</p>
+            </div>
+            <button onclick="handleAdminLogout()" class="text-xs text-rose-400 hover:underline">Keluar (Logout)</button>
+          </div>
+
+          <form onsubmit="handleFormSubmit(event)" class="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl space-y-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-zinc-400 mb-1">Judul Perjalanan</label>
+                <input id="form-title" required placeholder="Contoh: Eksplorasi Pantai Papuma" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-zinc-400 mb-1">Kategori</label>
+                <select id="form-category" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none">
+                  <option value="Pendakian">Pendakian</option>
+                  <option value="Traveling">Traveling</option>
+                  <option value="Wisata">Wisata</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-zinc-400 mb-1">Nama Tempat/Lokasi</label>
+                <input id="form-loc" required placeholder="Pantai Papuma, Jember" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none" />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-zinc-400 mb-1">Tanggal Perjalanan</label>
+                <input id="form-date" type="date" required value="${new Date().toISOString().split('T')[0]}" class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-zinc-400 mb-1">Catatan / Deskripsi Cerita</label>
+              <textarea id="form-desc" rows="3" placeholder="Ceritakan kisah perjalanan..." class="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none"></textarea>
+            </div>
+
+            <!-- SEARCH LOKASI MAPS NOMINATIM -->
+            <div class="border border-zinc-800 bg-zinc-950 p-4 sm:p-5 rounded-2xl space-y-3">
+              <label class="block text-xs font-black text-emerald-400 uppercase tracking-wider">
+                📍 Cari Lokasi Peta (Ketik Seperti di Google Maps)
+              </label>
+              <p class="text-[11px] text-zinc-400">Ketik nama tempat (contoh: <em>Nuanu</em>, <em>Gunung Raung</em>, <em>Kawah Ijen</em>). Klik hasil rekomendasi atau geser pin langsung pada peta.</p>
+              
+              <div class="relative">
+                <div class="flex gap-2">
+                  <input id="search-map-query" type="text" placeholder="Ketik nama tempat di sini..." class="flex-1 bg-zinc-900 border border-zinc-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:border-emerald-500 outline-none" />
+                  <button type="button" onclick="searchLocationMap()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl text-xs font-bold text-white">
+                    Cari Lokasi
+                  </button>
+                </div>
+                <div id="search-loc-dropdown" class="hidden absolute left-0 right-0 top-12 bg-zinc-800 border border-zinc-700 rounded-xl max-h-48 overflow-y-auto z-50 shadow-2xl divide-y divide-zinc-700"></div>
+              </div>
+
+              <div id="admin-map-container" class="h-60 w-full rounded-xl overflow-hidden border border-zinc-800"></div>
+
+              <div class="grid grid-cols-2 gap-3 pt-1">
+                <div>
+                  <label class="text-[10px] text-zinc-500 uppercase font-bold">Latitude</label>
+                  <input id="form-lat" type="number" step="any" value="-8.125" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 font-mono text-xs text-emerald-400" />
+                </div>
+                <div>
+                  <label class="text-[10px] text-zinc-500 uppercase font-bold">Longitude</label>
+                  <input id="form-lng" type="number" step="any" value="114.042" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 font-mono text-xs text-emerald-400" />
+                </div>
+              </div>
+            </div>
+
+            <!-- UPLOAD FOTO DARI FILE (BUKAN URL) -->
+            <div class="border border-zinc-800 bg-zinc-950 p-4 sm:p-5 rounded-2xl space-y-4">
+              <label class="block text-xs font-black text-emerald-400 uppercase tracking-wider">
+                🖼️ Upload Foto dari Galeri HP / Laptop
+              </label>
+
+              <div>
+                <label class="block text-xs text-zinc-400 mb-1 font-medium">1. Foto Cover:</label>
+                <input type="file" accept="image/*" onchange="uploadCoverFile(event)" class="w-full text-xs text-zinc-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white cursor-pointer bg-zinc-900 p-2 rounded-xl border border-zinc-800" />
+                <div id="cover-preview-wrapper" class="mt-2 hidden">
+                  <img id="cover-preview-element" class="h-32 rounded-xl object-cover border border-zinc-700 shadow-md" />
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-xs text-zinc-400 mb-1 font-medium">2. Foto Galeri (Bisa pilih sekaligus banyak):</label>
+                <input type="file" accept="image/*" multiple onchange="uploadGalleryFiles(event)" class="w-full text-xs text-zinc-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-zinc-700 file:text-white cursor-pointer bg-zinc-900 p-2 rounded-xl border border-zinc-800" />
+                <div id="gallery-preview-wrapper" class="grid grid-cols-3 gap-2 mt-2"></div>
+              </div>
+            </div>
+
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl transition-all shadow-lg shadow-emerald-950 text-sm">
+              Simpan Album ke Database
+            </button>
+          </form>
+        </div>
+      `;
+
+      initPickerMap();
+    }
+
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById('admin-user').value.trim();
+      const p = document.getElementById('admin-pass').value.trim();
+      const errBox = document.getElementById('login-error');
+
+      if (u === 'admin' && p === 'adventure2026') {
+        isAdminAuth = true;
+        sessionStorage.setItem('admin_session_auth', 'true');
+        renderAdmin();
+      } else {
+        errBox.innerText = 'Username atau Password salah!';
+        errBox.classList.remove('hidden');
+      }
+    }
+
+    function handleAdminLogout() {
+      isAdminAuth = false;
+      sessionStorage.removeItem('admin_session_auth');
+      navigate('/');
+    }
+
+    function initPickerMap() {
+      setTimeout(() => {
+        if (pickerMap) pickerMap.remove();
+        pickerMap = L.map('admin-map-container').setView([-8.125, 114.042], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(pickerMap);
+
+        pickerMarker = L.marker([-8.125, 114.042], { draggable: true }).addTo(pickerMap);
+
+        pickerMarker.on('dragend', function(e) {
+          const pos = e.target.getLatLng();
+          document.getElementById('form-lat').value = pos.lat.toFixed(6);
+          document.getElementById('form-lng').value = pos.lng.toFixed(6);
+        });
+
+        pickerMap.on('click', function(e) {
+          pickerMarker.setLatLng(e.latlng);
+          document.getElementById('form-lat').value = e.latlng.lat.toFixed(6);
+          document.getElementById('form-lng').value = e.latlng.lng.toFixed(6);
+        });
+      }, 50);
+    }
+
+    async function searchLocationMap() {
+      const q = document.getElementById('search-map-query').value.trim();
+      const dd = document.getElementById('search-loc-dropdown');
+      if (!q) return;
+
+      dd.classList.remove('hidden');
+      dd.innerHTML = '<div class="p-3 text-xs text-zinc-400 animate-pulse">Sedang mencari lokasi...</div>';
+
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`);
+        const data = await res.json();
+
+        if (data.length === 0) {
+          dd.innerHTML = '<div class="p-3 text-xs text-zinc-500">Lokasi tidak ditemukan.</div>';
+          return;
+        }
+
+        dd.innerHTML = data.map(item => `
+          <div onclick="selectLocationResult(${item.lat}, ${item.lon}, '${item.display_name.replace(/'/g, "\\'")}')" class="p-2.5 text-xs hover:bg-zinc-700/80 cursor-pointer">
+            <div class="text-white font-bold">${item.display_name.split(',')[0]}</div>
+            <div class="text-[10px] text-zinc-400 truncate">${item.display_name}</div>
+          </div>
+        `).join('');
+      } catch (err) {
+        dd.innerHTML = '<div class="p-3 text-xs text-rose-400">Gagal mengambil data. Pastikan ada koneksi internet.</div>';
+      }
+    }
+
+    function selectLocationResult(lat, lon, fullAddress) {
+      document.getElementById('form-lat').value = lat;
+      document.getElementById('form-lng').value = lon;
+      document.getElementById('form-loc').value = fullAddress.split(',')[0];
+      document.getElementById('search-loc-dropdown').classList.add('hidden');
+
+      if (pickerMap && pickerMarker) {
+        pickerMap.setView([lat, lon], 13);
+        pickerMarker.setLatLng([lat, lon]);
+      }
+    }
+
+    function uploadCoverFile(e) {
+      const file = e.target.files[0];
+      if (file) {
+        compressImage(file, 900, 0.75, (b64) => {
+          tempCoverBase64 = b64;
+          document.getElementById('cover-preview-wrapper').classList.remove('hidden');
+          document.getElementById('cover-preview-element').src = b64;
+        });
+      }
+    }
+
+    function uploadGalleryFiles(e) {
+      const files = Array.from(e.target.files);
+      const box = document.getElementById('gallery-preview-wrapper');
+      box.innerHTML = '';
+
+      files.forEach(f => {
+        compressImage(f, 750, 0.75, (b64) => {
+          tempGalleryList.push({ url: b64, caption: f.name.replace(/\.[^/.]+$/, "") });
+          const img = document.createElement('img');
+          img.src = b64;
+          img.className = 'h-16 w-full object-cover rounded-lg border border-zinc-700';
+          box.appendChild(img);
+        });
+      });
+    }
+
+    function compressImage(file, maxW, q, cb) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const cvs = document.createElement('canvas');
+          let w = img.width;
+          let h = img.height;
+          if (w > maxW) {
+            h = Math.round((h * maxW) / w);
+            w = maxW;
+          }
+          cvs.width = w;
+          cvs.height = h;
+          const ctx = cvs.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          cb(cvs.toDataURL('image/jpeg', q));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleFormSubmit(e) {
+      e.preventDefault();
+      const title = document.getElementById('form-title').value;
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now().toString().slice(-4);
+
+      const newTrip = {
+        id: Date.now().toString(),
+        title: title,
+        slug: slug,
+        location: document.getElementById('form-loc').value,
+        category: document.getElementById('form-category').value,
+        date: document.getElementById('form-date').value,
+        description: document.getElementById('form-desc').value,
+        latitude: parseFloat(document.getElementById('form-lat').value),
+        longitude: parseFloat(document.getElementById('form-lng').value),
+        cover_image: tempCoverBase64 || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
+        photos: tempGalleryList.length > 0 ? tempGalleryList : [
+          { url: tempCoverBase64 || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80', caption: 'Dokumentasi' }
+        ]
+      };
+
+      trips.unshift(newTrip);
+      saveDB();
+      alert('Perjalanan berhasil disimpan!');
+      navigate('/');
+    }
+
+    // LIGHTBOX
+    function openLightbox(url, caption) {
+      const modal = document.getElementById('lightbox-modal');
+      document.getElementById('lightbox-img').src = url;
+      document.getElementById('lightbox-caption').innerText = caption;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeLightbox() {
+      const modal = document.getElementById('lightbox-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // JALANKAN ROUTE SAAT PERTAMA KALI HALAMAN DIBUKA
+    routeHandler();
+  </script>
+</body>
+</html>
